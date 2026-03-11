@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{TITLE}}</title>
+  <link rel="stylesheet" href="../../assets/app.css" />
+  <link rel="stylesheet" href="../../assets/prism.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="container">
+      <div class="breadcrumb">
+        <a href="../../index.html">← 返回索引</a>
+      </div>
+      <h1 class="h1">{{TITLE}}</h1>
+      <div class="sub">{{REL_PATH}}</div>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="panel">
+      <div class="meta">
+        <div><span class="k">类型</span> <span class="v">{{LANG}}</span></div>
+        <div><span class="k">大小</span> <span class="v">{{SIZE}}</span></div>
+        <div><span class="k">修改</span> <span class="v">{{MTIME}}</span></div>
+        <div><span class="k">风险</span> <span class="v">{{RISK}}</span></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      {{BLOCK_NOTICE}}
+      <pre class="codewrap"><code class="language-{{PRISM_LANG}}">{{CODE_HTML}}</code></pre>
+      {{DOWNLOAD_LINK}}
+    </section>
+  </main>
+
+  <script src="../../assets/prism.js"></script>
+  <script>try{Prism.highlightAll();}catch(e){}</script>
+</body>
+</html>

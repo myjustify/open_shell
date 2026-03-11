@@ -1,0 +1,6 @@
+/* Minimal Prism-like styling (offline placeholder) */
+code[class*="language-"], pre[class*="language-"]{
+  color:#e6e8ee;background:#0b0e14;text-shadow:none;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;
+  font-size:12px;line-height:1.6;
+}
+pre[class*="language-"]{padding:12px;margin:0;overflow:auto}
