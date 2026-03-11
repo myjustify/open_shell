@@ -110,6 +110,55 @@ function prismLang(lang) {
   return "plain";
 }
 
+async function buildReadmeRefs(rootAbs, manifestItems) {
+  const readmePath = path.join(rootAbs, "README.md");
+  let readme = "";
+  try {
+    readme = await fs.readFile(readmePath, "utf8");
+  } catch {
+    return { version: 1, generatedAt: new Date().toISOString(), items: [] };
+  }
+
+  const readmeLower = readme.toLowerCase();
+  const items = [];
+
+  for (const it of manifestItems) {
+    const base = path.posix.basename(it.relPath).toLowerCase();
+    const refs = [];
+    if (base && readmeLower.includes(base)) {
+      refs.push({ type: "readme-mention", label: "README 提到" });
+    }
+    if (it.relPath === "tool.sh" && readmeLower.includes("curl") && readmeLower.includes("tool.sh")) {
+      refs.push({ type: "readme-entry", label: "README 安装入口" });
+    }
+    if (refs.length) {
+      items.push({ relPath: it.relPath, refs });
+    }
+  }
+
+  return {
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    items,
+  };
+}
+
+async function buildPackageScripts(rootAbs) {
+  const pkgPath = path.join(rootAbs, "nodeimg", "package.json");
+  try {
+    const raw = await fs.readFile(pkgPath, "utf8");
+    const pkg = JSON.parse(raw);
+    const scripts = pkg && pkg.scripts ? pkg.scripts : {};
+    return {
+      version: 1,
+      generatedAt: new Date().toISOString(),
+      items: [{ relPath: "nodeimg/package.json", scripts }],
+    };
+  } catch {
+    return { version: 1, generatedAt: new Date().toISOString(), items: [] };
+  }
+}
+
 async function copyFile(src, dst) {
   await ensureDir(path.dirname(dst));
   await fs.copyFile(src, dst);
@@ -231,6 +280,24 @@ async function buildSite({ rootAbs, outAbs, base }) {
 
   await fs.writeFile(path.join(outAbs, "index.html"), tplIndex, "utf8");
 
+  // README 引用与 npm scripts
+  const readmeRefs = await buildReadmeRefs(rootAbs, manifest.items);
+  const packageScripts = await buildPackageScripts(rootAbs);
+
+  await fs.writeFile(
+    path.join(dataDir, "readme-refs.json"),
+    JSON.stringify(readmeRefs, null, 2) + "\n",
+    "utf8",
+  );
+  await fs.writeFile(
+    path.join(dataDir, "package-scripts.json"),
+    JSON.stringify(packageScripts, null, 2) + "\n",
+    "utf8",
+  );
+
+  const readmeRefsByRel = new Map(readmeRefs.items.map((x) => [x.relPath, x.refs]));
+  const scriptsByRel = new Map(packageScripts.items.map((x) => [x.relPath, x.scripts]));
+
   // 为每个文件生成详情页：s/<id>/index.html
   for (const it of manifest.items) {
     const pageDir = path.join(outAbs, "s", it.id);
@@ -271,6 +338,17 @@ async function buildSite({ rootAbs, outAbs, base }) {
 
     const riskLabel = it.blocked ? "已隐藏" : "可展示";
 
+    const refs = readmeRefsByRel.get(it.relPath) || [];
+    const scripts = scriptsByRel.get(it.relPath) || null;
+
+    const refsHtml = refs.length
+      ? `<div class="notice">README 引用：${htmlEscape(refs.map((r) => r.label).join("、"))}</div>`
+      : "";
+
+    const scriptsHtml = scripts
+      ? `<div class="notice">npm scripts：${htmlEscape(Object.entries(scripts).map(([k, v]) => `${k} = ${v}`).join("；"))}</div>`
+      : "";
+
     const html = applyTemplate(tplDetail, {
       TITLE: htmlEscape(it.title || it.relPath),
       REL_PATH: htmlEscape(it.relPath),
@@ -280,8 +358,10 @@ async function buildSite({ rootAbs, outAbs, base }) {
       MTIME: htmlEscape(formatDate(it.mtimeMs)),
       RISK: htmlEscape(riskLabel),
       BLOCK_NOTICE: notice,
+      ENTRYPOINTS: scriptsHtml,
       CODE_HTML: codeHtml,
       DOWNLOAD_LINK: downloadLink,
+      README_REFS: refsHtml,
       BASE: base || "",
     });
 
