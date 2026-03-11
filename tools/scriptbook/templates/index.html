@@ -17,9 +17,23 @@
   <main class="container">
     <section class="panel">
       <div class="row">
+        <input id="q" class="input" placeholder="搜索（标题/路径/描述/标签）" />
+        <select id="dir" class="select"></select>
+        <select id="type" class="select"></select>
+        <select id="sort" class="select">
+          <option value="name">按名称</option>
+          <option value="mtime">按最近修改</option>
+          <option value="size">按大小</option>
+        </select>
+        <button id="reset" class="btn">重置</button>
+      </div>
+      <div class="row" style="margin-top:10px">
         <div class="muted" id="stats">加载中…</div>
       </div>
       <div id="list" class="list"></div>
+      <div class="row" style="margin-top:10px">
+        <button id="more" class="btn">加载更多</button>
+      </div>
     </section>
   </main>
 

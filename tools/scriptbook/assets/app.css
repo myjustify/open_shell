@@ -9,6 +9,10 @@ a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
 .breadcrumb{padding-top:12px}
 .panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px;margin:16px 0}
 .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.input,.select{background:#0f1522;color:var(--text);border:1px solid var(--border);border-radius:10px;padding:8px 10px;font-size:12px}
+.input{flex:1;min-width:240px}
+.btn{background:#0f1522;color:var(--text);border:1px solid var(--border);border-radius:10px;padding:8px 12px;font-size:12px;cursor:pointer}
+.btn:hover{border-color:#2f4061}
 .muted{color:var(--muted);font-size:12px}
 .list{display:flex;flex-direction:column;gap:8px;margin-top:10px}
 .item{display:flex;gap:10px;justify-content:space-between;align-items:flex-start;padding:10px;border:1px solid var(--border);border-radius:10px;background:#0f1522}
