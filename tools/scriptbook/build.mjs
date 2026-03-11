@@ -6,6 +6,7 @@ import path from "node:path";
 
 import { SCRIPTBOOK_CONFIG } from "./config.mjs";
 import { defaultTitleFromPath, inferLang, parseHeaderMeta } from "./parse-metadata.mjs";
+import { redactText } from "./redact.mjs";
 
 export async function scanRepoFiles(rootDir) {
   const rootAbs = path.resolve(rootDir);
@@ -77,6 +78,7 @@ async function safeReadText(absPath, maxBytes) {
 
 async function buildManifest({ rootAbs, relPaths }) {
   const items = [];
+  const redactionReports = [];
 
   for (const relPath of relPaths) {
     const abs = path.join(rootAbs, ...relPath.split("/"));
@@ -90,6 +92,26 @@ async function buildManifest({ rootAbs, relPaths }) {
 
     const header = parseHeaderMeta(text, 60);
 
+    // 脱敏/阻断：仅在允许扫描内容范围内执行；过大文件直接标记 too_large。
+    let blocked = tooLarge;
+    let blockReason = tooLarge ? "too_large" : "";
+
+    if (!tooLarge) {
+      const red = redactText({ relPath, text });
+      redactionReports.push(red.report);
+      if (red.blocked) {
+        blocked = true;
+        blockReason = `blocked:${(red.report.blockReasons || []).join(",")}`;
+      }
+    } else {
+      redactionReports.push({
+        relPath,
+        blocked: true,
+        blockReasons: ["too_large"],
+        hits: [],
+      });
+    }
+
     items.push({
       id,
       relPath,
@@ -100,12 +122,19 @@ async function buildManifest({ rootAbs, relPaths }) {
       title: header.title || defaultTitleFromPath(relPath),
       desc: header.desc || "",
       tags: header.tags || [],
-      blocked: tooLarge,
-      blockReason: tooLarge ? "too_large" : "",
+      blocked,
+      blockReason,
     });
   }
 
-  return { version: 1, generatedAt: new Date().toISOString(), items };
+  return {
+    manifest: { version: 1, generatedAt: new Date().toISOString(), items },
+    redactionReport: {
+      version: 1,
+      generatedAt: new Date().toISOString(),
+      items: redactionReports,
+    },
+  };
 }
 
 async function main() {
@@ -114,12 +143,17 @@ async function main() {
   const outAbs = path.resolve(args.out);
 
   const relPaths = await scanRepoFiles(rootAbs);
-  const manifest = await buildManifest({ rootAbs, relPaths });
+  const { manifest, redactionReport } = await buildManifest({ rootAbs, relPaths });
 
   await ensureDir(path.join(outAbs, "data"));
   await fs.writeFile(
     path.join(outAbs, "data", "manifest.json"),
     JSON.stringify(manifest, null, 2) + "\n",
+    "utf8",
+  );
+  await fs.writeFile(
+    path.join(outAbs, "data", "redaction-report.json"),
+    JSON.stringify(redactionReport, null, 2) + "\n",
     "utf8",
   );
 
