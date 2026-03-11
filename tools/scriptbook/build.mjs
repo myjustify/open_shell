@@ -1,12 +1,17 @@
 #!/usr/bin/env node
 
 import fs from "node:fs/promises";
+import crypto from "node:crypto";
 import path from "node:path";
+
 import { SCRIPTBOOK_CONFIG } from "./config.mjs";
+import { defaultTitleFromPath, inferLang, parseHeaderMeta } from "./parse-metadata.mjs";
 
 export async function scanRepoFiles(rootDir) {
   const rootAbs = path.resolve(rootDir);
   const results = [];
+
+  // 统一输出为 posix 风格路径，确保后续 id 与 URL 稳定。
 
   /** @param {string} dirAbs */
   async function walk(dirAbs) {
@@ -54,11 +59,71 @@ function parseArgs(argv) {
   return out;
 }
 
+function sha1Hex(input) {
+  return crypto.createHash("sha1").update(input).digest("hex");
+}
+
+async function ensureDir(dir) {
+  await fs.mkdir(dir, { recursive: true });
+}
+
+async function safeReadText(absPath, maxBytes) {
+  const buf = await fs.readFile(absPath);
+  if (buf.byteLength > maxBytes) {
+    return { tooLarge: true, text: "" };
+  }
+  return { tooLarge: false, text: buf.toString("utf8") };
+}
+
+async function buildManifest({ rootAbs, relPaths }) {
+  const items = [];
+
+  for (const relPath of relPaths) {
+    const abs = path.join(rootAbs, ...relPath.split("/"));
+    const st = await fs.stat(abs);
+
+    const ext = path.extname(relPath).toLowerCase();
+    const id = sha1Hex(relPath);
+
+    const { tooLarge, text } = await safeReadText(abs, SCRIPTBOOK_CONFIG.maxScanBytes);
+    const firstLine = text.split(/\r?\n/)[0] || "";
+
+    const header = parseHeaderMeta(text, 60);
+
+    items.push({
+      id,
+      relPath,
+      ext,
+      sizeBytes: st.size,
+      mtimeMs: st.mtimeMs,
+      lang: inferLang({ relPath, ext, firstLine }),
+      title: header.title || defaultTitleFromPath(relPath),
+      desc: header.desc || "",
+      tags: header.tags || [],
+      blocked: tooLarge,
+      blockReason: tooLarge ? "too_large" : "",
+    });
+  }
+
+  return { version: 1, generatedAt: new Date().toISOString(), items };
+}
+
 async function main() {
   const args = parseArgs(process.argv);
-  const files = await scanRepoFiles(args.root);
-  // Task 1 阶段：仅验证扫描输入范围，先输出到 stdout。
-  process.stdout.write(files.join("\n") + (files.length ? "\n" : ""));
+  const rootAbs = path.resolve(args.root);
+  const outAbs = path.resolve(args.out);
+
+  const relPaths = await scanRepoFiles(rootAbs);
+  const manifest = await buildManifest({ rootAbs, relPaths });
+
+  await ensureDir(path.join(outAbs, "data"));
+  await fs.writeFile(
+    path.join(outAbs, "data", "manifest.json"),
+    JSON.stringify(manifest, null, 2) + "\n",
+    "utf8",
+  );
+
+  process.stdout.write(`manifest: ${manifest.items.length} files\n`);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
