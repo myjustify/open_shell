@@ -314,10 +314,15 @@ async function buildSite({ rootAbs, outAbs, base }) {
       const { text } = await safeReadText(abs, SCRIPTBOOK_CONFIG.maxScanBytes);
       const red = redactText({ relPath: it.relPath, text });
 
-      // 默认仅展示前 N 行（你已选择该策略）
+      // 默认仅展示前 N 行（你已选择该策略）。
+      // 对超过阈值的文件也同样只预览前 N 行。
       const lines = red.text.split(/\r?\n/);
       const preview = lines.slice(0, SCRIPTBOOK_CONFIG.defaultPreviewLines).join("\n");
-      if (lines.length > SCRIPTBOOK_CONFIG.defaultPreviewLines) {
+      const shouldPreviewOnly =
+        lines.length > SCRIPTBOOK_CONFIG.defaultPreviewLines ||
+        (Number.isFinite(it.sizeBytes) && it.sizeBytes > SCRIPTBOOK_CONFIG.bigFileBytes);
+
+      if (shouldPreviewOnly) {
         notice = `<div class="notice">大文件预览：仅显示前 ${SCRIPTBOOK_CONFIG.defaultPreviewLines} 行（共 ${lines.length} 行）。</div>`;
       }
 

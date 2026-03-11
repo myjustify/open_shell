@@ -6,5 +6,5 @@
 - [x] Task 4: 生成 index.html + 详情页骨架
 - [x] Task 5: 前端搜索/过滤/分页（分片与懒加载）
 - [x] Task 6: README 与 package.json scripts 聚合
-- [ ] Task 7: 本地预览命令与 GitHub Pages（Actions）
-- [ ] Task 8: 文档归档（docs/plans）
+- [x] Task 7: 本地预览命令与 GitHub Pages（Actions）
+- [x] Task 8: 文档归档（docs/plans）
