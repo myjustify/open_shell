@@ -30,6 +30,24 @@
       <div class="row" style="margin-top:10px">
         <div class="muted" id="stats">加载中…</div>
       </div>
+      <div class="row" style="margin-top:10px">
+        <select id="state" class="select">
+          <option value="">全部状态</option>
+          <option value="visible">仅可展示</option>
+          <option value="blocked">仅已隐藏</option>
+        </select>
+        <select id="entry" class="select">
+          <option value="">全部入口</option>
+          <option value="readme">README 提到</option>
+          <option value="npm">npm scripts</option>
+        </select>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div class="tagpanel">
+          <div class="tagpanel-title muted">标签（AND，多选）</div>
+          <div id="tags" class="tagbox"></div>
+        </div>
+      </div>
       <div id="list" class="list"></div>
       <div class="row" style="margin-top:10px">
         <button id="more" class="btn">加载更多</button>

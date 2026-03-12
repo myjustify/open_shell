@@ -35,11 +35,30 @@ export function parseHeaderMeta(text, maxLines = 60) {
   // 或 # Title: ...（shell/python/yaml 常见）
   const meta = { title: "", desc: "", tags: [] };
 
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (!line) continue;
+  /**
+   * 仅从“注释行”中提取信息，避免误读正文。
+   * 允许的注释前缀：// # ; /* *
+   */
+  function parseCommentText(rawLine) {
+    const line = String(rawLine || "").trim();
+    if (!line) return null;
+    if (line.startsWith("#!")) return null;
+    const m = line.match(/^(?:\/\/|#|;|\/\*+|\*)\s*(.+)$/);
+    if (!m) return null;
+    const txt = String(m[1] || "").trim();
+    return txt ? txt : null;
+  }
 
-    const m = line.match(/^(?:\/\/|#|;|\/\*+|\*)\s*(Title|Desc|Tags)\s*:\s*(.+)$/i);
+  // 先收集注释文本（保持行序），后续所有派生规则都只在这里运行。
+  const commentLines = [];
+  for (const raw of lines) {
+    const txt = parseCommentText(raw);
+    if (txt) commentLines.push(txt);
+  }
+
+  // 1) 显式字段：Title/Desc/Tags
+  for (const txt of commentLines) {
+    const m = txt.match(/^(Title|Desc|Tags)\s*:\s*(.+)$/i);
     if (!m) continue;
 
     const key = m[1].toLowerCase();
@@ -54,21 +73,35 @@ export function parseHeaderMeta(text, maxLines = 60) {
     }
   }
 
-  // 如果没有显式字段，尝试用第一条“有效注释句”作为 desc（跳过 shebang）。
+  // 2) 关键词行：功能/用途/作用/简介/描述：...
   if (!meta.desc) {
-    for (const raw of lines) {
-      const line = raw.trim();
-      if (!line) continue;
-      if (line.startsWith("#!")) continue;
-
-      const m = line.match(/^(?:\/\/|#|;|\/\*+|\*)\s*(.+)$/);
+    for (const txt of commentLines) {
+      const m = txt.match(/^(功能|用途|作用|简介|描述)\s*[：:]\s*(.+)$/i);
       if (!m) continue;
-      const txt = m[1].trim();
-      if (txt) {
-        meta.desc = txt;
+      const val = String(m[2] || "").trim();
+      if (val) {
+        meta.desc = val;
         break;
       }
     }
+  }
+
+  // 3) filename - desc（仅对注释行做轻量匹配）
+  if (!meta.desc) {
+    for (const txt of commentLines) {
+      const m = txt.match(/^([^\s]+)\s+-\s+(.+)$/);
+      if (!m) continue;
+      const val = String(m[2] || "").trim();
+      if (val) {
+        meta.desc = val;
+        break;
+      }
+    }
+  }
+
+  // 4) 最后回退：第一条“有效注释句”
+  if (!meta.desc) {
+    meta.desc = commentLines[0] || "";
   }
 
   return meta;

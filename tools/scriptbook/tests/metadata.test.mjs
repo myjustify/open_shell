@@ -35,3 +35,24 @@ test("parseHeaderMeta 无显式字段时，取第一条注释作为 desc", () =>
   assert.equal(meta.desc, "这是一个工具脚本");
   assert.deepEqual(meta.tags, []);
 });
+
+test("parseHeaderMeta 支持 功能/用途/作用/简介/描述 行优先作为 desc", () => {
+  const text = [
+    "#!/usr/bin/env bash",
+    "# 一行无关注释",
+    "# 功能：批量清理缓存",
+    "# 另一行注释",
+    "echo ok",
+  ].join("\n");
+  const meta = parseHeaderMeta(text);
+  assert.equal(meta.desc, "批量清理缓存");
+});
+
+test("parseHeaderMeta 支持 filename - desc 作为 desc", () => {
+  const text = [
+    "# deploy_client.sh - 部署客户端静态资源",
+    "echo ok",
+  ].join("\n");
+  const meta = parseHeaderMeta(text);
+  assert.equal(meta.desc, "部署客户端静态资源");
+});

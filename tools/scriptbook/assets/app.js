@@ -18,10 +18,22 @@
     return idx === -1 ? "(root)" : s.slice(0, idx);
   }
 
-  async function loadManifest(){
-    const res = await fetch("data/manifest.json", { cache: "no-store" });
-    if (!res.ok) throw new Error("无法加载 manifest.json");
+  async function loadJson(url, errMsg){
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) throw new Error(errMsg);
     return res.json();
+  }
+
+  async function loadManifest(){
+    return loadJson("data/manifest.json", "无法加载 manifest.json");
+  }
+
+  async function loadReadmeRefs(){
+    return loadJson("data/readme-refs.json", "无法加载 readme-refs.json");
+  }
+
+  async function loadPackageScripts(){
+    return loadJson("data/package-scripts.json", "无法加载 package-scripts.json");
   }
 
   function indexItem(it){
@@ -63,13 +75,39 @@
 
       const left = document.createElement("div");
       left.className = "left";
-      left.innerHTML = `<div class="title">${esc(it.title || it.relPath)}</div><div class="path">${esc(it.relPath)}</div>`;
+
+      const tags = Array.isArray(it.tags) ? it.tags.filter(Boolean) : [];
+      const shown = tags.slice(0, 3);
+      const moreN = Math.max(0, tags.length - shown.length);
+      const tagHtml = shown.map((t)=>`<span class="chip">${esc(t)}</span>`).join("");
+      const moreHtml = moreN ? `<span class="chip chip-more">+${moreN}</span>` : "";
+
+      const desc = String(it.desc || "").trim();
+      const descHtml = desc ? `<div class="desc">${esc(desc)}</div>` : `<div class="desc muted">（无描述）</div>`;
+
+      left.innerHTML = [
+        `<div class="title">${esc(it.title || it.relPath)}</div>`,
+        `<div class="path">${esc(it.relPath)}</div>`,
+        descHtml,
+        (tagHtml || moreHtml) ? `<div class="chips">${tagHtml}${moreHtml}</div>` : "",
+      ].join("");
 
       const right = document.createElement("div");
       const badges = [];
       badges.push(`<span class="badge">${esc(it.lang || it.ext || "")}</span>`);
       if(it.blocked){
         badges.push(`<span class="badge bad">已隐藏</span>`);
+      } else {
+        badges.push(`<span class="badge good">可展示</span>`);
+      }
+      if(it.redacted){
+        badges.push(`<span class="badge warn">已脱敏</span>`);
+      }
+      if(it.isReadmeEntry){
+        badges.push(`<span class="badge">README</span>`);
+      }
+      if(it.hasNpmScripts){
+        badges.push(`<span class="badge">npm</span>`);
       }
       badges.push(`<span class="badge">${esc(fmtBytes(it.sizeBytes))}</span>`);
       right.innerHTML = badges.join(" ");
@@ -93,23 +131,80 @@
     };
 
     try{
-      const m = await loadManifest();
+      const [m, readmeRefs, pkgScripts] = await Promise.all([
+        loadManifest(),
+        loadReadmeRefs(),
+        loadPackageScripts(),
+      ]);
+
+      const readmeSet = new Set(
+        (readmeRefs && Array.isArray(readmeRefs.items) ? readmeRefs.items : []).map((x) => x.relPath)
+      );
+
+      const npmSet = new Set(
+        (pkgScripts && Array.isArray(pkgScripts.items) ? pkgScripts.items : []).map((x) => x.relPath)
+      );
+
       state.manifest = m;
-      state.all = m.items || [];
+      state.all = (m.items || []).map((it) => ({
+        ...it,
+        isReadmeEntry: readmeSet.has(it.relPath),
+        hasNpmScripts: npmSet.has(it.relPath),
+      }));
+
       state.indexed = state.all.map((it) => ({ it, dir: firstDir(it.relPath), q: indexItem(it) }));
 
       fillSelect($("dir"), uniqSorted(state.indexed.map((x)=>x.dir)), "全部目录");
       fillSelect($("type"), uniqSorted(state.all.map((x)=>x.lang || x.ext || "").filter(Boolean)), "全部类型");
+
+      const allTags = uniqSorted(
+        state.all.flatMap((x)=>Array.isArray(x.tags) ? x.tags : []).filter(Boolean)
+      );
+
+      const tagsBox = $("tags");
+      tagsBox.innerHTML = "";
+      for(const t of allTags){
+        const lab = document.createElement("label");
+        lab.className = "tagopt";
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.value = t;
+        cb.addEventListener("change", () => apply());
+        const sp = document.createElement("span");
+        sp.textContent = t;
+        lab.appendChild(cb);
+        lab.appendChild(sp);
+        tagsBox.appendChild(lab);
+      }
 
       function apply(){
         const q = ($("q").value || "").trim().toLowerCase();
         const dir = $("dir").value;
         const type = $("type").value;
         const sort = $("sort").value;
+        const st = $("state").value;
+        const entry = $("entry").value;
+
+        const selectedTags = Array.from(document.querySelectorAll("#tags input[type=checkbox]:checked"))
+          .map((x) => x.value)
+          .filter(Boolean);
 
         let arr = state.indexed;
         if (dir) arr = arr.filter((x)=>x.dir === dir);
         if (type) arr = arr.filter((x)=> (x.it.lang || x.it.ext || "") === type);
+        if (selectedTags.length) {
+          arr = arr.filter((x) => {
+            if (!Array.isArray(x.it.tags)) return false;
+            for (const t of selectedTags) {
+              if (!x.it.tags.includes(t)) return false;
+            }
+            return true;
+          });
+        }
+        if (st === "visible") arr = arr.filter((x)=>!x.it.blocked);
+        if (st === "blocked") arr = arr.filter((x)=>!!x.it.blocked);
+        if (entry === "readme") arr = arr.filter((x)=>!!x.it.isReadmeEntry);
+        if (entry === "npm") arr = arr.filter((x)=>!!x.it.hasNpmScripts);
         if (q) arr = arr.filter((x)=>x.q.includes(q));
 
         let items = arr.map((x)=>x.it);
@@ -137,15 +232,46 @@
               const a = document.createElement("a");
               a.className = "item";
               a.href = `s/${encodeURIComponent(it.id)}/index.html`;
+
               const left = document.createElement("div");
               left.className = "left";
-              left.innerHTML = `<div class="title">${esc(it.title || it.relPath)}</div><div class="path">${esc(it.relPath)}</div>`;
+
+              const tags = Array.isArray(it.tags) ? it.tags.filter(Boolean) : [];
+              const shown = tags.slice(0, 3);
+              const moreN = Math.max(0, tags.length - shown.length);
+              const tagHtml = shown.map((t)=>`<span class="chip">${esc(t)}</span>`).join("");
+              const moreHtml = moreN ? `<span class="chip chip-more">+${moreN}</span>` : "";
+
+              const desc = String(it.desc || "").trim();
+              const descHtml = desc ? `<div class="desc">${esc(desc)}</div>` : `<div class="desc muted">（无描述）</div>`;
+
+              left.innerHTML = [
+                `<div class="title">${esc(it.title || it.relPath)}</div>`,
+                `<div class="path">${esc(it.relPath)}</div>`,
+                descHtml,
+                (tagHtml || moreHtml) ? `<div class="chips">${tagHtml}${moreHtml}</div>` : "",
+              ].join("");
+
               const right = document.createElement("div");
               const badges = [];
               badges.push(`<span class="badge">${esc(it.lang || it.ext || "")}</span>`);
-              if(it.blocked){ badges.push(`<span class="badge bad">已隐藏</span>`); }
+              if(it.blocked){
+                badges.push(`<span class="badge bad">已隐藏</span>`);
+              } else {
+                badges.push(`<span class="badge good">可展示</span>`);
+              }
+              if(it.redacted){
+                badges.push(`<span class="badge warn">已脱敏</span>`);
+              }
+              if(it.isReadmeEntry){
+                badges.push(`<span class="badge">README</span>`);
+              }
+              if(it.hasNpmScripts){
+                badges.push(`<span class="badge">npm</span>`);
+              }
               badges.push(`<span class="badge">${esc(fmtBytes(it.sizeBytes))}</span>`);
               right.innerHTML = badges.join(" ");
+
               a.appendChild(left);
               a.appendChild(right);
               frag.appendChild(a);
@@ -163,12 +289,19 @@
       $("dir").addEventListener("change", () => apply());
       $("type").addEventListener("change", () => apply());
       $("sort").addEventListener("change", () => apply());
+      $("state").addEventListener("change", () => apply());
+      $("entry").addEventListener("change", () => apply());
       $("more").addEventListener("click", () => loadMore());
       $("reset").addEventListener("click", () => {
         $("q").value = "";
         $("dir").value = "";
         $("type").value = "";
         $("sort").value = "name";
+        $("state").value = "";
+        $("entry").value = "";
+        for (const cb of document.querySelectorAll("#tags input[type=checkbox]")) {
+          cb.checked = false;
+        }
         apply();
       });
 

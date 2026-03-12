@@ -203,10 +203,18 @@ async function buildManifest({ rootAbs, relPaths }) {
     // 脱敏/阻断：仅在允许扫描内容范围内执行；过大文件直接标记 too_large。
     let blocked = tooLarge;
     let blockReason = tooLarge ? "too_large" : "";
+    let redacted = false;
 
     if (!tooLarge) {
       const red = redactText({ relPath, text });
       redactionReports.push(red.report);
+
+      // 只要有任何命中（脱敏或阻断），都认为该文件存在“已脱敏/命中”信号。
+      // 注意：阻断会导致详情页不展示内容，但索引仍可用该信号做 badge/筛选。
+      if (red.report && Array.isArray(red.report.hits) && red.report.hits.length > 0) {
+        redacted = true;
+      }
+
       if (red.blocked) {
         blocked = true;
         blockReason = `blocked:${(red.report.blockReasons || []).join(",")}`;
@@ -232,6 +240,7 @@ async function buildManifest({ rootAbs, relPaths }) {
       tags: header.tags || [],
       blocked,
       blockReason,
+      redacted,
     });
   }
 

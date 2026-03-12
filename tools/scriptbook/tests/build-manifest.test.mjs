@@ -8,7 +8,7 @@ import { scanRepoFiles } from "../build.mjs";
 
 test("build 脚本可生成最小 manifest.json", async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "scriptbook-manifest-"));
-  await fs.writeFile(path.join(tmp, "a.sh"), "# Title: A\n# Desc: D\necho ok\n");
+  await fs.writeFile(path.join(tmp, "a.sh"), "# Title: A\n# Desc: D\nemail=a@b.com\necho ok\n");
   await fs.writeFile(path.join(tmp, "README.md"), "# Hello\n");
   await fs.mkdir(path.join(tmp, "nodeimg"));
   await fs.writeFile(path.join(tmp, "nodeimg", "package.json"), "{\"scripts\":{\"dev\":\"node server.js\"}}\n");
@@ -51,4 +51,5 @@ test("build 脚本可生成最小 manifest.json", async () => {
   assert.equal(a.lang, "bash");
   assert.equal(a.title, "A");
   assert.equal(a.desc, "D");
+  assert.equal(a.redacted, true);
 });
